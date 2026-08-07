@@ -1,0 +1,17 @@
+# ChatFlow AI Backend
+
+Backend for AI chatbot automation.
+
+Features:
+- WhatsApp Cloud API
+- Webhooks
+- AI integration
+- CRM integration
+
+## Setup
+
+npm install
+
+Create .env file
+
+npm start
