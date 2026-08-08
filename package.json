@@ -1,16 +1,17 @@
 {
-  "name": "chatflow-backend",
-  "version": "1.0.0",
-  "description": "AI chatbot backend for WhatsApp, Instagram and Messenger",
-  "type": "module",
-  "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
-  },
-  "dependencies": {
-    "axios": "^1.7.9",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0"
-  }
+"name": "chatflow-backend",
+"version": "1.0.0",
+"description": "AI chatbot backend for WhatsApp, Instagram and Messenger",
+"type": "module",
+"scripts": {
+"start": "node src/server.js",
+"dev": "node --watch src/server.js"
+},
+"dependencies": {
+"@supabase/supabase-js": "^2.57.4",
+"axios": "^1.7.9",
+"cors": "^2.8.5",
+"dotenv": "^16.4.7",
+"express": "^5.1.0"
+}
 }
