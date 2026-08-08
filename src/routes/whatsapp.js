@@ -1,178 +1,203 @@
 import express from "express";
 
 import {
-  generateAIResponse
+generateAIResponse
 } from "../services/ai.service.js";
 
 import {
-  sendWhatsAppMessage
+sendWhatsAppMessage
 } from "../services/whatsapp.service.js";
 
 import {
-  getOrCreateContact,
-  saveMessage,
-  getConversation
+getOrCreateContact,
+saveMessage,
+getConversation
 } from "../services/supabase.service.js";
-
 
 const router = express.Router();
 
-
 const VERIFY_TOKEN =
-  process.env.WHATSAPP_VERIFY_TOKEN;
+process.env.WHATSAPP_VERIFY_TOKEN;
 
-
+// ========================================
+// Meta Webhook Verification
+// ========================================
 
 router.get("/", (req, res) => {
 
-  const mode =
-    req.query["hub.mode"];
+const mode =
+req.query["hub.mode"];
 
-  const token =
-    req.query["hub.verify_token"];
+const token =
+req.query["hub.verify_token"];
 
-  const challenge =
-    req.query["hub.challenge"];
+const challenge =
+req.query["hub.challenge"];
 
+if (
+mode === "subscribe" &&
+token === VERIFY_TOKEN
+) {
 
-  if (
-    mode === "subscribe" &&
-    token === VERIFY_TOKEN
-  ) {
+console.log(
+  "WhatsApp webhook verified"
+);
 
-    return res
-      .status(200)
-      .send(challenge);
+return res
+  .status(200)
+  .send(challenge);
 
-  }
+}
 
-
-  return res.sendStatus(403);
-
+return res.sendStatus(403);
 });
 
-
+// ========================================
+// WhatsApp Incoming Messages
+// ========================================
 
 router.post("/", async (req, res) => {
 
-  // Respond to Meta immediately
-  res.sendStatus(200);
+// Respond to Meta immediately
+res.sendStatus(200);
+
+try {
+
+const entry =
+  req.body?.entry?.[0];
+
+const change =
+  entry?.changes?.[0];
+
+const value =
+  change?.value;
 
 
-  try {
+// Ignore events without messages
 
-    const message =
-      req.body
-        ?.entry?.[0]
-        ?.changes?.[0]
-        ?.value
-        ?.messages?.[0];
+if (!value?.messages) {
+  return;
+}
 
 
-    if (!message) {
-      return;
-    }
+const message =
+  value.messages[0];
 
 
-    if (message.type !== "text") {
-      return;
-    }
+// Currently support text messages only
+
+if (
+  !message ||
+  message.type !== "text"
+) {
+  return;
+}
 
 
-    const phone =
-      message.from;
+const phone =
+  message.from;
 
-    const text =
-      message.text?.body?.trim();
-
-
-    if (!phone || !text) {
-      return;
-    }
+const text =
+  message.text?.body?.trim();
 
 
-    console.log(
-      "Incoming:",
-      phone,
-      text
-    );
+if (!phone || !text) {
+  return;
+}
 
 
-    // Get/create customer
-
-    const contact =
-      await getOrCreateContact(
-        phone
-      );
-
-
-    // Save customer message
-
-    await saveMessage(
-      contact.id,
-      "inbound",
-      text
-    );
+console.log(
+  "📩 WhatsApp:",
+  phone,
+  text
+);
 
 
-    // Get conversation history
+// ========================================
+// 1. Find or create contact
+// ========================================
 
-    const history =
-      await getConversation(
-        contact.id,
-        10
-      );
-
-
-    // Generate AI response
-
-    const reply =
-      await generateAIResponse(
-        text,
-        history
-      );
+const contact =
+  await getOrCreateContact(
+    phone
+  );
 
 
-    console.log(
-      "AI:",
-      reply
-    );
+// ========================================
+// 2. Save incoming message
+// ========================================
+
+await saveMessage(
+  contact.id,
+  "inbound",
+  text
+);
 
 
-    // Send WhatsApp reply
+// ========================================
+// 3. Get conversation history
+// ========================================
 
-    await sendWhatsAppMessage(
-      phone,
-      reply
-    );
-
-
-    // Save AI response
-
-    await saveMessage(
-      contact.id,
-      "outbound",
-      reply
-    );
+const history =
+  await getConversation(
+    contact.id,
+    10
+  );
 
 
-    console.log(
-      "Reply sent successfully"
-    );
+// ========================================
+// 4. Generate AI response
+// ========================================
+
+const reply =
+  await generateAIResponse(
+    text,
+    history
+  );
 
 
-  } catch (error) {
+console.log(
+  "🤖 AI:",
+  reply
+);
 
-    console.error(
-      "Webhook error:",
-      error.response?.data ||
-      error.message ||
-      error
-    );
 
-  }
+// ========================================
+// 5. Send WhatsApp response
+// ========================================
+
+await sendWhatsAppMessage(
+  phone,
+  reply
+);
+
+
+// ========================================
+// 6. Save AI response
+// ========================================
+
+await saveMessage(
+  contact.id,
+  "outbound",
+  reply
+);
+
+
+console.log(
+  "✅ Reply sent successfully"
+);
+
+} catch (error) {
+
+console.error(
+  "❌ WhatsApp webhook error:",
+  error.response?.data ||
+  error.message ||
+  error
+);
+
+}
 
 });
-
 
 export default router;
