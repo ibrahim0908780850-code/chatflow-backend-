@@ -8,14 +8,20 @@ import {
   sendWhatsAppMessage
 } from "../services/whatsapp.service.js";
 
+import {
+  getOrCreateContact,
+  saveMessage,
+  getConversation
+} from "../services/supabase.service.js";
+
 
 const router = express.Router();
+
 
 const VERIFY_TOKEN =
   process.env.WHATSAPP_VERIFY_TOKEN;
 
 
-// Meta Webhook Verification
 
 router.get("/", (req, res) => {
 
@@ -34,39 +40,33 @@ router.get("/", (req, res) => {
     token === VERIFY_TOKEN
   ) {
 
-    console.log("Webhook verified");
-
     return res
       .status(200)
       .send(challenge);
+
   }
 
 
   return res.sendStatus(403);
+
 });
 
 
-// Incoming WhatsApp messages
 
 router.post("/", async (req, res) => {
 
-  // Respond immediately to Meta
+  // Respond to Meta immediately
   res.sendStatus(200);
 
 
   try {
 
-    const entry =
-      req.body?.entry?.[0];
-
-    const changes =
-      entry?.changes?.[0];
-
-    const value =
-      changes?.value;
-
     const message =
-      value?.messages?.[0];
+      req.body
+        ?.entry?.[0]
+        ?.changes?.[0]
+        ?.value
+        ?.messages?.[0];
 
 
     if (!message) {
@@ -74,7 +74,6 @@ router.post("/", async (req, res) => {
     }
 
 
-    // We currently support text messages
     if (message.type !== "text") {
       return;
     }
@@ -83,40 +82,77 @@ router.post("/", async (req, res) => {
     const phone =
       message.from;
 
-    const userMessage =
-      message.text?.body;
+    const text =
+      message.text?.body?.trim();
+
+
+    if (!phone || !text) {
+      return;
+    }
 
 
     console.log(
-      "User:",
-      phone
+      "Incoming:",
+      phone,
+      text
     );
 
-    console.log(
-      "Message:",
-      userMessage
+
+    // Get/create customer
+
+    const contact =
+      await getOrCreateContact(
+        phone
+      );
+
+
+    // Save customer message
+
+    await saveMessage(
+      contact.id,
+      "inbound",
+      text
     );
+
+
+    // Get conversation history
+
+    const history =
+      await getConversation(
+        contact.id,
+        10
+      );
 
 
     // Generate AI response
 
-    const aiResponse =
+    const reply =
       await generateAIResponse(
-        userMessage
+        text,
+        history
       );
 
 
     console.log(
       "AI:",
-      aiResponse
+      reply
     );
 
 
-    // Send response
+    // Send WhatsApp reply
 
     await sendWhatsAppMessage(
       phone,
-      aiResponse
+      reply
+    );
+
+
+    // Save AI response
+
+    await saveMessage(
+      contact.id,
+      "outbound",
+      reply
     );
 
 
@@ -128,9 +164,10 @@ router.post("/", async (req, res) => {
   } catch (error) {
 
     console.error(
-      "WhatsApp webhook error:",
+      "Webhook error:",
       error.response?.data ||
-      error.message
+      error.message ||
+      error
     );
 
   }
